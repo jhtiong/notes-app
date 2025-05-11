@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text, ScrollView, SafeAreaView } from 'react-native';
+import { View, TextInput, StyleSheet, TouchableOpacity, Text, ScrollView, SafeAreaView, Alert } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, Note, CATEGORIES } from '../types';
@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
 const MAX_CONTENT_LENGTH = 200;
+const MIN_CONTENT_LENGTH = 1;
 
 type NoteScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Note'>;
 type NoteScreenRouteProp = RouteProp<RootStackParamList, 'Note'>;
@@ -24,6 +25,7 @@ export default function NoteScreen() {
   const [content, setContent] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Load existing note data if noteId is provided
   useEffect(() => {
@@ -57,17 +59,38 @@ export default function NoteScreen() {
   };
 
   /**
+   * Validates the note content
+   * @returns boolean indicating if the content is valid
+   */
+  const validateContent = (): boolean => {
+    if (!content.trim()) {
+      setError('Note content is required');
+      return false;
+    }
+    if (content.trim().length < MIN_CONTENT_LENGTH) {
+      setError(`Note content must be at least ${MIN_CONTENT_LENGTH} character long`);
+      return false;
+    }
+    setError(null);
+    return true;
+  };
+
+  /**
    * Saves the current note to AsyncStorage
    * Creates a new note or updates an existing one
    */
   const saveNote = async () => {
+    if (!validateContent()) {
+      return;
+    }
+
     try {
       const storedNotes = await AsyncStorage.getItem('notes');
       let notes: Note[] = storedNotes ? JSON.parse(storedNotes) : [];
       const newNote: Note = {
         id: route.params?.noteId || Date.now().toString(),
         title,
-        content,
+        content: content.trim(),
         categoryId: selectedCategory,
         createdAt: route.params?.noteId ? notes.find(n => n.id === route.params?.noteId)?.createdAt || new Date().toISOString() : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -80,7 +103,7 @@ export default function NoteScreen() {
       await AsyncStorage.setItem('notes', JSON.stringify(notes));
       navigation.navigate('Home');
     } catch (error) {
-      // Handle error silently
+      Alert.alert('Error', 'Failed to save note. Please try again.');
     }
   };
 
@@ -91,6 +114,10 @@ export default function NoteScreen() {
   const handleContentChange = (text: string) => {
     if (text.length <= MAX_CONTENT_LENGTH) {
       setContent(text);
+      // Clear error when user starts typing
+      if (error) {
+        setError(null);
+      }
     }
   };
   
@@ -123,18 +150,26 @@ export default function NoteScreen() {
               ))}
             </View>
           )}
-          <TextInput
-            style={styles.contentInput}
-            placeholder="Please input note content"
-            placeholderTextColor="#bdbdbd"
-            value={content}
-            onChangeText={handleContentChange}
-            multiline
-            textAlignVertical="top"
-            maxLength={MAX_CONTENT_LENGTH}
-          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[styles.contentInput, error && styles.inputError]}
+              placeholder="Please input note content"
+              placeholderTextColor="#bdbdbd"
+              value={content}
+              onChangeText={handleContentChange}
+              multiline
+              textAlignVertical="top"
+              maxLength={MAX_CONTENT_LENGTH}
+            />
+            {error && <Text style={styles.errorText}>{error}</Text>}
+            <Text style={styles.charCount}>{content.length}/{MAX_CONTENT_LENGTH}</Text>
+          </View>
         </View>
-        <TouchableOpacity style={styles.saveButton} onPress={saveNote}>
+        <TouchableOpacity 
+          style={[styles.saveButton, !content.trim() && styles.saveButtonDisabled]} 
+          onPress={saveNote}
+          disabled={!content.trim()}
+        >
           <Text style={styles.saveButtonText}>Save</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -201,6 +236,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+  inputContainer: {
+    position: 'relative',
+    marginTop: 8,
+    marginBottom: 8,
+  },
   contentInput: {
     backgroundColor: 'rgba(255,255,255,0.10)',
     borderRadius: 12,
@@ -208,8 +248,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     padding: 14,
-    marginTop: 8,
-    marginBottom: 8,
+  },
+  inputError: {
+    borderColor: '#FF6B6B',
+    borderWidth: 1,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  charCount: {
+    color: '#bdbdbd',
+    fontSize: 12,
+    textAlign: 'right',
+    marginTop: 4,
   },
   saveButton: {
     backgroundColor: '#F94695',
@@ -224,6 +278,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
+  },
+  saveButtonDisabled: {
+    backgroundColor: 'rgba(249, 70, 149, 0.5)',
   },
   saveButtonText: {
     color: '#fff',
