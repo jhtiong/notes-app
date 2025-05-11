@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Image, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, Note, Category, CATEGORIES } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from '@expo/vector-icons';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 
 // Import category icons as images
 import workIcon from '../../assets/home-work.png';
@@ -57,6 +58,33 @@ export default function HomeScreen() {
   };
 
   /**
+   * Deletes a note from AsyncStorage
+   * @param noteId - The ID of the note to delete
+   */
+  const deleteNote = async (noteId: string) => {
+    Alert.alert(
+      'Delete Note',
+      'Are you sure you want to delete this note?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updatedNotes = notes.filter(note => note.id !== noteId);
+              await AsyncStorage.setItem('notes', JSON.stringify(updatedNotes));
+              setNotes(updatedNotes);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete note');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  /**
    * Gets the latest 3 notes for a specific category
    * @param categoryId - The ID of the category to filter notes
    * @returns Array of the 3 most recent notes for the category
@@ -66,6 +94,22 @@ export default function HomeScreen() {
       .filter(note => note.categoryId === categoryId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 3);
+  };
+
+  /**
+   * Renders the delete action for swipeable notes
+   * @param noteId - The ID of the note to delete
+   * @returns JSX element for the delete action
+   */
+  const renderRightActions = (noteId: string) => {
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => deleteNote(noteId)}
+      >
+        <Ionicons name="trash-outline" size={24} color="#fff" />
+      </TouchableOpacity>
+    );
   };
 
   /**
@@ -82,19 +126,24 @@ export default function HomeScreen() {
           <Text style={[styles.categoryTitle, { color: CATEGORY_COLORS[category.id] }]}>{category.name}</Text>
         </View>
         {categoryNotes.map(note => (
-          <TouchableOpacity
+          <Swipeable
             key={note.id}
-            style={styles.noteItem}
-            onPress={() => navigation.navigate('Note', { noteId: note.id })}
-            activeOpacity={0.8}
+            renderRightActions={() => renderRightActions(note.id)}
+            overshootRight={false}
           >
-            <Text style={styles.noteTitle} numberOfLines={2}>
-              {note.content.length > 20 ? `${note.content.slice(0, 20)}...` : note.content}
-            </Text>
-            <View style={styles.arrowCircle}> 
-              <Ionicons name="chevron-forward" size={18} color="#fff" />
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.noteItem}
+              onPress={() => navigation.navigate('Note', { noteId: note.id })}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.noteTitle} numberOfLines={2}>
+                {note.content.length > 20 ? `${note.content.slice(0, 20)}...` : note.content}
+              </Text>
+              <View style={styles.arrowCircle}> 
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </Swipeable>
         ))}
         {categoryNotes.length === 0 && (
           <Text style={styles.emptyText}>No notes in this category</Text>
@@ -125,26 +174,28 @@ export default function HomeScreen() {
 
   // Main render method
   return (
-    <LinearGradient colors={["#1B284F", "#351159", "#421C45", "#3B184E"]} style={styles.gradient}>
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Home</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Image source={settingsIcon} style={styles.settingsImg} resizeMode="contain" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionTitleRow}>
-            <FontAwesome5 name="clock" style={styles.recentIcon} resizeMode="contain" />
-            <Text style={styles.sectionTitle}>Recently created notes</Text>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <LinearGradient colors={["#1B284F", "#351159", "#421C45", "#3B184E"]} style={styles.gradient}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Home</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+              <Image source={settingsIcon} style={styles.settingsImg} resizeMode="contain" />
+            </TouchableOpacity>
           </View>
-        </View>
-        <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }}>
-          {CATEGORIES.map(renderCategorySection)}
-        </ScrollView>
-        {renderBottomNav()}
-      </SafeAreaView>
-    </LinearGradient>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionTitleRow}>
+              <FontAwesome5 name="clock" style={styles.recentIcon} resizeMode="contain" />
+              <Text style={styles.sectionTitle}>Recently created notes</Text>
+            </View>
+          </View>
+          <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }}>
+            {CATEGORIES.map(renderCategorySection)}
+          </ScrollView>
+          {renderBottomNav()}
+        </SafeAreaView>
+      </LinearGradient>
+    </GestureHandlerRootView>
   );
 }
 
@@ -251,6 +302,10 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   emptyText: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     textAlign: 'left',
     color: '#bdbdbd',
     fontStyle: 'italic',
@@ -302,6 +357,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     fontWeight: '600',
+  },
+  deleteAction: {
+    backgroundColor: '#FF6B6B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '85%',
+    borderRadius: 16,
+    marginLeft: 8,
   },
 });
 
